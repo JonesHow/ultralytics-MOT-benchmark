@@ -1,0 +1,24 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# logs
+logs/
+
+# temp files
+.temp/
+
+# model files
+models/
+
+# video files
+RAW_ORIGINAL_VIDEOS/
+RAW_SHORT_VIDEOS/
+output_videos/

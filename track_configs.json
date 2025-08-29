@@ -1,0 +1,29 @@
+{
+  "default": {
+    "conf": 0.5,
+    "verbose": false,
+    "tracker": "custom_botsort.yaml",
+    "imgsz": 640,
+    "classes": [0],
+    "persist": true,
+    "iou": 0.5
+  },
+  "fast": {
+    "conf": 0.6,
+    "verbose": false,
+    "tracker": "custom_botsort.yaml",
+    "imgsz": 512,
+    "classes": [0],
+    "persist": true,
+    "iou": 0.45
+  },
+  "accurate": {
+    "conf": 0.4,
+    "verbose": false,
+    "tracker": "custom_botsort.yaml",
+    "imgsz": 960,
+    "classes": [0],
+    "persist": true,
+    "iou": 0.5
+  }
+}
