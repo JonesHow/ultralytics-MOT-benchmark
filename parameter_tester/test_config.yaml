@@ -1,0 +1,24 @@
+# 測試配置
+test_settings:
+  video_source: "RAW_SHORT_VIDEOS/camera-d8accaf0_60s.mp4"
+  weights: "models/yolo12x.pt"
+  max_concurrent_tests: 2
+  cleanup_temp_files: true
+
+# 參數測試範圍（支援兩種定義方式）
+parameters:
+  # # 方式一：明確列表
+  # track_high_thresh: [0.2, 0.5]
+
+  # # 方式二：區間 + 間隔
+  # track_low_thresh:
+  #   range: [0.1, 0.2]
+  #   step: 0.1
+
+  gmc_method: ['sparseOptFlow', 'sift', 'orb', 'none']
+
+# 測試策略
+strategy:
+  type: "grid_search"  # grid_search, random_search, hierarchical
+  max_combinations: 50
+  random_seed: 42

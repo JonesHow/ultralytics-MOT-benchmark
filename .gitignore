@@ -12,6 +12,11 @@ wheels/
 # logs
 logs/
 
+# reports
+reports/
+test_reports/
+demo_reports/
+
 # temp files
 .temp/
 
