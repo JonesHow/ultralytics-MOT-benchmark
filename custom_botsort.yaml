@@ -17,7 +17,7 @@ match_thresh: 0.8           # 軌跡匹配的 IoU 閾值
 fuse_score: true            # 融合檢測分數和 IoU，提高匹配準確性
 
 # 全域運動補償（處理相機移動）
-gmc_method: ecc   # 使用稀疏光流進行運動補償
+gmc_method: sparseOptFlow   # 使用稀疏光流進行運動補償
 
 # ReID（重新識別）設定
 with_reid: true             # 啟用基於外觀的重新識別

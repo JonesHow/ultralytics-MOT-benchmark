@@ -54,10 +54,14 @@ def load_track_config(
     name: str,
     device: str,
     overrides: dict | None = None,
-) -> dict:
+) -> tuple[dict, dict | None]:
     """
     從 JSON 檔載入指定名稱的 track_config；找不到時使用內建預設。
     可用 overrides 覆寫欄位，例如 conf、imgsz、classes、iou 等。
+
+    Returns:
+        tuple: (track_config, custom_tracker_config)
+               custom_tracker_config 為 None 表示使用內建追蹤器
     """
     # 內建預設
     default_presets = {
@@ -112,6 +116,8 @@ def load_track_config(
     if overrides:
         cfg.update(overrides)
 
+    custom_tracker_config = None
+
     # 檢查是否使用自定義追蹤器配置並記錄到日誌中
     tracker_name = cfg.get("tracker", "")
     if tracker_name and tracker_name not in ["bytetrack.yaml", "botsort.yaml"]:
@@ -128,7 +134,7 @@ def load_track_config(
         else:
             logger.warning(f"自定義追蹤器配置文件 {tracker_name} 不存在")
 
-    return cfg
+    return cfg, custom_tracker_config
 
 def run(
     weights,
@@ -198,7 +204,7 @@ def run(
 
     # Track 設定參數（由管理機制取得）
     overrides = parse_overrides(track_overrides)
-    track_config = load_track_config(track_configs_path, track_config_name, device, overrides)
+    track_config, custom_tracker_config = load_track_config(track_configs_path, track_config_name, device, overrides)
 
     # 在第一個 frame 前記錄一次 track 設定與環境
     logger.info(f"Track 設定參數: {track_config}")
@@ -322,6 +328,7 @@ def run(
         "total_frames": total_frames,
         "device": device,
         "track_config": track_config,
+        "custom_tracker_config": custom_tracker_config,  # 新增：自定義追蹤器配置內容
         "stats": {
             "frames_processed": frame_count,
             "avg_inference_time": (statistics.mean(inference_times[2:]) if len(inference_times) > 2 else (statistics.mean(inference_times) if inference_times else None)),
@@ -368,7 +375,7 @@ if __name__ == "__main__":
     # 也輸出到控制台，與 tqdm 兼容
     logger.add(lambda msg: tqdm.write(msg, end=""), level="INFO", format="{message}")
 
-    logger.info("開始執行 YOLOv8 視頻推理程序")
+    logger.info("開始執行 Ultralytics 影像推理程序")
 
     meta = run(
         person_weights,
