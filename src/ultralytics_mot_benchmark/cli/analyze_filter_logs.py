@@ -48,6 +48,7 @@ def _write_csv(path: str, ranking: List[Dict[str, Any]]) -> None:
         "id_switches",
         "total_tracks",
         "avg_track_length",
+        "parameters",
     ]
 
     with open(path, "w", newline="", encoding="utf-8") as f:
@@ -71,7 +72,132 @@ def _write_csv(path: str, ranking: List[Dict[str, Any]]) -> None:
                 "id_switches": km.get("id_switches", ""),
                 "total_tracks": km.get("total_tracks", ""),
                 "avg_track_length": km.get("avg_track_length", ""),
+                "parameters": json.dumps(r.get("parameters", {}), ensure_ascii=False),
             })
+
+
+def _write_topk_json(path: str, top_list: List[Dict[str, Any]]) -> None:
+    out = []
+    for idx, r in enumerate(top_list, 1):
+        out.append({
+            "rank": idx,
+            "file": r.get("file_path"),
+            "run_id": r.get("run_id"),
+            "quality_scores": r.get("quality_scores", {}),
+            "key_metrics": r.get("key_metrics", {}),
+            "parameters": r.get("parameters", {}),
+        })
+    _write_json(path, out)
+
+
+def _write_html(path: str, timestamp: str, source_dir: str, total: int,
+                best: Dict[str, Any], top_list: List[Dict[str, Any]]) -> None:
+    def esc(x: Any) -> str:
+        try:
+            return (str(x) if x is not None else "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        except Exception:
+            return ""
+
+    rows_html = []
+    for idx, r in enumerate(top_list, 1):
+        qs = r.get("quality_scores", {})
+        km = r.get("key_metrics", {})
+        rows_html.append(
+            f"<tr>"
+            f"<td>{idx}</td>"
+            f"<td>{esc(r.get('run_id'))}</td>"
+            f"<td>{esc(r.get('file_path'))}</td>"
+            f"<td>{esc(qs.get('overall_score'))}</td>"
+            f"<td>{esc(km.get('avg_fps'))}</td>"
+            f"<td>{esc(km.get('continuity_ratio'))}</td>"
+            f"<td>{esc(km.get('fragmentation_ratio'))}</td>"
+            f"<td>{esc(km.get('id_switches'))}</td>"
+            f"</tr>"
+        )
+
+    params_sections = []
+    for idx, r in enumerate(top_list, 1):
+        params = r.get("parameters", {}) or {}
+        kv_rows = "".join(
+            f"<tr><td>{esc(k)}</td><td>{esc(v)}</td></tr>" for k, v in sorted(params.items())
+        ) or "<tr><td colspan=2><em>No parameters</em></td></tr>"
+        params_sections.append(
+            f"""
+            <section class=card>
+              <h3>#{idx} {esc(r.get('run_id'))}</h3>
+              <table class=kv>
+                <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+                <tbody>
+                  {kv_rows}
+                </tbody>
+              </table>
+            </section>
+            """
+        )
+
+    best_fp = esc(best.get("file")) if best else ""
+    best_id = esc(best.get("run_id")) if best else ""
+    best_score = esc(best.get("overall_score")) if best else ""
+
+    html = f"""
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Filter Logs Analysis Report</title>
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 24px; color: #2c3e50; }}
+    h1 {{ margin: 0 0 8px; }}
+    .muted {{ color: #7f8c8d; }}
+    .summary {{ background: #ecf0f1; padding: 16px; border-radius: 8px; margin: 16px 0 24px; }}
+    table {{ width: 100%; border-collapse: collapse; }}
+    th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+    th {{ background: #f7f7f7; }}
+    .card {{ border: 1px solid #e1e4e8; border-radius: 8px; padding: 12px; margin: 16px 0; }}
+    .kv th, .kv td {{ border: 1px solid #eee; }}
+  </style>
+  </head>
+<body>
+  <h1>Filter Logs Analysis Report</h1>
+  <div class="muted">Generated at {esc(timestamp)} · Source: {esc(source_dir)} · Total results: {total}</div>
+
+  <div class="summary">
+    <strong>Best:</strong>
+    <div>Run ID: {best_id}</div>
+    <div>File: {best_fp}</div>
+    <div>Overall Score: {best_score}</div>
+  </div>
+
+  <h2>Top Results</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Run ID</th>
+        <th>File</th>
+        <th>Overall Score</th>
+        <th>Avg FPS</th>
+        <th>Continuity Ratio</th>
+        <th>Fragmentation Ratio</th>
+        <th>ID Switches</th>
+      </tr>
+    </thead>
+    <tbody>
+      {''.join(rows_html)}
+    </tbody>
+  </table>
+
+  <h2>Top-K Parameters</h2>
+  {''.join(params_sections)}
+
+  <footer class="muted">This report is auto-generated.</footer>
+</body>
+</html>
+"""
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(html)
 
 
 def run(input_dir: str, out_dir: str, pattern: str, top_k: int) -> Dict[str, Any]:
@@ -114,9 +240,19 @@ def run(input_dir: str, out_dir: str, pattern: str, top_k: int) -> Dict[str, Any
     csv_path = os.path.join(out_dir, f"filter_logs_ranking_{timestamp}.csv")
     _write_csv(csv_path, ranking)
 
+    # Top-K 參數明細 JSON
+    topk_params_path = os.path.join(out_dir, f"filter_logs_topk_parameters_{timestamp}.json")
+    _write_topk_json(topk_params_path, top_list)
+
+    # HTML 報告
+    html_path = os.path.join(out_dir, f"filter_logs_report_{timestamp}.html")
+    _write_html(html_path, timestamp, os.path.abspath(input_dir), summary.get("total_results", 0), json_out.get("best", {}), top_list)
+
     return {
         "json": json_path,
         "csv": csv_path,
+        "html": html_path,
+        "topk_json": topk_params_path,
         "total": summary.get("total_results", 0),
         "best_file": json_out["best"].get("file"),
         "best_score": json_out["best"].get("overall_score"),
@@ -145,6 +281,8 @@ def main():
         print(f"Best score: {result['best_score']}")
         print(f"JSON: {result['json']}")
         print(f"CSV:  {result['csv']}")
+        print(f"HTML: {result['html']}")
+        print(f"TopK: {result['topk_json']}")
     except Exception as e:
         print(f"Error: {e}")
         raise SystemExit(1)
@@ -152,4 +290,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
