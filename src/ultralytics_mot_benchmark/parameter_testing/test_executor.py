@@ -1,11 +1,5 @@
 """
-測import subprocess
-import os
-import uuid
-from datetime import datetime
-from typing import Dict, Any, Optional, List
-import json
-import yaml責調用 ultralytics_inference_video.py 執行測試
+測試執行器：呼叫 mot-infer 執行單次推理測試，並彙整結果。
 """
 
 import subprocess
@@ -15,22 +9,33 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 import json
 import yaml
-import json
+
+
+def generate_run_id() -> str:
+    """產生唯一的 run_id，用於綁定影片與日誌等產物。"""
+    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%S%fZ")
+    short = uuid.uuid4().hex[:8]
+    return f"{ts}_{short}"
 
 
 class TestExecutor:
     """測試執行器"""
 
-    def __init__(self, script_path: str, base_config: Dict[str, Any]):
+    def __init__(self, base_config: Dict[str, Any], repo_root: Optional[str] = None):
         """
         初始化測試執行器
 
         Args:
-            script_path: ultralytics_inference_video.py 的路徑
             base_config: 基礎配置
+            repo_root: 倉庫根目錄（執行 mot-infer 的 cwd），預設為自動推測
         """
-        self.script_path = script_path
         self.base_config = base_config
+        # 推測倉庫根目錄：從當前檔案回到專案根（src/../../）
+        if repo_root is None:
+            this_dir = os.path.dirname(os.path.abspath(__file__))
+            self.repo_root = os.path.abspath(os.path.join(this_dir, "..", "..", ".."))
+        else:
+            self.repo_root = os.path.abspath(repo_root)
 
     def execute_test(self, config_path: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -44,7 +49,7 @@ class TestExecutor:
             測試結果字典
         """
         # 生成唯一的 run_id
-        run_id = str(uuid.uuid4())[:8]
+        run_id = generate_run_id()
 
         # 準備命令參數
         cmd_args, env_vars = self._prepare_command_args(config_path, run_id)
@@ -87,16 +92,28 @@ class TestExecutor:
         Returns:
             命令參數列表
         """
-        # 由於 ultralytics_inference_video.py 使用環境變數，我們需要設置環境變數
-        env_vars = {
-            "TRACK_CONFIG": self.base_config.get("track_config_name", "default"),
-            "TRACK_CONFIGS_PATH": self.base_config.get("track_configs_path", "track_configs.json"),
-            "TRACK_OVERRIDES": self._prepare_track_overrides(config_path)
-        }
+        # 以 CLI 方式呼叫 mot-infer，盡量用參數避免倚賴環境變數
+        weights = self.base_config.get("weights", "models/yolo12x.pt")
+        source = self.base_config.get("video_source", "data/samples/camera-d8accaf0_10s.mp4")
+        output = self.base_config.get("output_dir", "outputs/videos")
+        track_config_name = self.base_config.get("track_config_name", "default")
+        track_configs_path = self.base_config.get("track_configs_path", "configs/track_configs.json")
 
-        # 命令只包含 python 和腳本路徑
-        args = ["python", self.script_path]
+        args: List[str] = [
+            "mot-infer",
+            "--weights", weights,
+            "--source", source,
+            "--output", output,
+            "--track-config", track_config_name,
+            "--track-configs-path", track_configs_path,
+            "--run-id", run_id,
+        ]
+        overrides = self._prepare_track_overrides(config_path)
+        if overrides:
+            args += ["--track-overrides", overrides]
 
+        # 不必設定環境變數；保留空字典
+        env_vars: Dict[str, str] = {}
         return args, env_vars
 
     def _prepare_track_overrides(self, config_path: str) -> str:
@@ -131,7 +148,7 @@ class TestExecutor:
 
             result = subprocess.run(
                 cmd_args,
-                cwd=os.path.dirname(self.script_path),
+                cwd=self.repo_root,
                 capture_output=True,
                 text=False,  # 保持為 bytes
                 timeout=3600,  # 1小時超時
@@ -155,12 +172,13 @@ class TestExecutor:
         Returns:
             檔案路徑字典
         """
-        base_dir = os.path.dirname(self.script_path)
-
+        output = self.base_config.get("output_dir", "outputs/videos")
+        source = self.base_config.get("video_source", "data/samples/camera-d8accaf0_60s.mp4")
+        stem = os.path.splitext(os.path.basename(source))[0]
         return {
-            "video_path": os.path.join(base_dir, "output_videos", f"camera-d8accaf0_60s__{run_id}.mp4"),
-            "log_path": os.path.join(base_dir, "logs", f"inference_{run_id}.log"),
-            "metadata_path": os.path.join(base_dir, "output_videos", f"camera-d8accaf0_60s__{run_id}.json")
+            "video_path": os.path.join(self.repo_root, output, f"{stem}__{run_id}.mp4"),
+            "log_path": os.path.join(self.repo_root, "logs", f"inference_{run_id}.log"),
+            "metadata_path": os.path.join(self.repo_root, output, f"{stem}__{run_id}.json"),
         }
 
     def _parse_execution_results(self, run_id: str) -> Dict[str, Any]:
@@ -173,24 +191,16 @@ class TestExecutor:
         Returns:
             解析後的結果
         """
-        results = {}
-
-        # 嘗試讀取最新的 metadata JSON 檔案
-        # 由於我們不知道確切的 run_id，我們查找最新的檔案
-        metadata_dir = os.path.join(os.path.dirname(self.script_path), "output_videos")
-        if os.path.exists(metadata_dir):
-            json_files = [f for f in os.listdir(metadata_dir) if f.endswith('.json') and 'camera-d8accaf0_60s' in f]
-            if json_files:
-                # 按修改時間排序，獲取最新的
-                json_files.sort(key=lambda x: os.path.getmtime(os.path.join(metadata_dir, x)), reverse=True)
-                latest_json = json_files[0]
-                metadata_path = os.path.join(metadata_dir, latest_json)
-
-                try:
-                    with open(metadata_path, 'r', encoding='utf-8') as f:
-                        metadata = json.load(f)
-                        results["metadata"] = metadata
-                except Exception as e:
-                    results["metadata_error"] = str(e)
-
+        results: Dict[str, Any] = {}
+        paths = self._get_output_paths(run_id)
+        metadata_path = paths.get("metadata_path")
+        try:
+            if metadata_path and os.path.exists(metadata_path):
+                with open(metadata_path, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+                    results["metadata"] = metadata
+            else:
+                results["metadata_error"] = f"No JSON found: {metadata_path}"
+        except Exception as e:
+            results["metadata_error"] = str(e)
         return results

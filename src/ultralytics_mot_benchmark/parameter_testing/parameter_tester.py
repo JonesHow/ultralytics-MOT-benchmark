@@ -5,22 +5,31 @@
 """
 
 import os
-import sys
 import argparse
 import json
+import sys
 from datetime import datetime
 from typing import Dict, Any, List
 from pathlib import Path
 
-# 添加當前目錄到 Python 路徑
 current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, current_dir)
+repo_root = os.path.abspath(os.path.join(current_dir, "..", "..", ".."))
 
 from parameter_generator import ParameterGenerator, load_config
 from config_generator import ConfigGenerator
 from test_executor import TestExecutor
 from result_collector import ResultCollector
 from utils import ensure_directory, cleanup_temp_directories, validate_config, format_duration
+
+
+class NumpyEncoder(json.JSONEncoder):
+    """自定義 JSON 編碼器，用於處理 numpy 類型"""
+    def default(self, obj):
+        if hasattr(obj, 'item'):  # numpy 類型
+            return obj.item()
+        elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes)):
+            return list(obj)
+        return super().default(obj)
 
 
 class ParameterTester:
@@ -43,12 +52,14 @@ class ParameterTester:
 
         # 初始化組件
         self.param_generator = ParameterGenerator(self.config)
+        # 模板改至專案 configs/templates
         self.config_generator = ConfigGenerator(
-            os.path.join(current_dir, "templates", "botsort_template.yaml")
+            os.path.join(repo_root, "configs", "templates", "botsort_template.yaml")
         )
+        # 使用 mot-infer CLI；repo_root 作為 cwd
         self.test_executor = TestExecutor(
-            os.path.join(os.path.dirname(current_dir), "ultralytics_inference_video.py"),
-            self.config.get("test_settings", {})
+            base_config=self.config.get("test_settings", {}),
+            repo_root=repo_root,
         )
         self.result_collector = ResultCollector()
 
@@ -133,7 +144,7 @@ class ParameterTester:
         if tracking.get("total_tracks"):
             print(f"   軌跡數: {tracking['total_tracks']}")
 
-    def generate_report(self, results: List[Dict[str, Any]], output_dir: str = "reports"):
+    def generate_report(self, results: List[Dict[str, Any]], output_dir: str = os.path.join(repo_root, "outputs", "reports")):
         """
         生成測試報告
 
@@ -149,12 +160,12 @@ class ParameterTester:
 
         # 保存詳細結果
         with open(report_file, 'w', encoding='utf-8') as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
+            json.dump(results, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
 
         # 保存摘要
         summary = self.result_collector.get_summary_statistics()
         with open(summary_file, 'w', encoding='utf-8') as f:
-            json.dump(summary, f, indent=2, ensure_ascii=False)
+            json.dump(summary, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
 
         print(f"\n報告已生成:")
         print(f"詳細結果: {report_file}")
@@ -194,14 +205,14 @@ def main():
     parser.add_argument(
         "--config",
         type=str,
-        default="test_config.yaml",
+        default="../../../configs/test_config.yaml",
         help="測試配置檔案路徑"
     )
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="reports",
-        help="報告輸出目錄"
+        default=os.path.join(repo_root, "outputs", "reports"),
+        help="報告輸出目錄（預設：<repo_root>/outputs/reports）"
     )
     parser.add_argument(
         "--analyze-only",

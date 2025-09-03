@@ -1,0 +1,54 @@
+# 測試配置
+test_settings:
+  video_source: "data/samples/camera-d8accaf0_60s.mp4"
+  weights: "models/yolo12x.pt"
+  output_dir: "outputs/videos"
+  track_config_name: "default"
+  track_configs_path: "configs/track_configs.json"
+  max_concurrent_tests: 2
+  cleanup_temp_files: true
+
+# 參數測試範圍（支援兩種定義方式）
+parameters:
+  # 方式一：明確列表
+  # track_high_thresh: [0.2, 0.5]
+
+  # 方式二：區間 + 間隔
+  track_high_thresh:
+    range: [0.1, 1.0]
+    step: 0.1
+
+  track_low_thresh:
+    range: [0.1, 1.0]
+    step: 0.1
+
+  new_track_thresh:
+    range: [0.1, 1.0]
+    step: 0.1
+
+  track_buffer:
+    range: [10, 200]
+    step: 10
+
+  match_thresh:
+    range: [0.1, 1.0]
+    step: 0.1
+
+  proximity_thresh:
+    range: [0.1, 1.0]
+    step: 0.1
+
+  appearance_thresh:
+    range: [0.1, 1.0]
+    step: 0.1
+
+  with_reid: ['true']
+
+  gmc_method: ['sparseOptFlow', 'none']
+
+# 測試策略
+strategy:
+  type: "random_search"  # grid_search, random_search, hierarchical
+  max_combinations: 400
+  random_seed: 42
+  repetitions: 2  # 每個參數組合重複測試 n 次

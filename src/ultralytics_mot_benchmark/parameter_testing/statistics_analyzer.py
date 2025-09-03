@@ -17,6 +17,7 @@ from sklearn.model_selection import cross_val_score
 import matplotlib.pyplot as plt
 import seaborn as sns
 from data_validator import DataValidator
+from loguru import logger
 
 
 class StatisticsAnalyzer:
@@ -68,7 +69,23 @@ class StatisticsAnalyzer:
                 row.update({
                     "total_tracks": tracking.get("total_tracks", 0),
                     "avg_track_length": tracking.get("avg_track_length", 0),
-                    "track_switches": tracking.get("track_switches", 0)
+                    "max_track_length": tracking.get("max_track_length", 0),
+                    "min_track_length": tracking.get("min_track_length", 0),
+                    "frames_processed_tracking": tracking.get("frames_processed", 0),
+                    "avg_active_tracks_per_frame": tracking.get("avg_active_tracks_per_frame", 0),
+                    # 連續性指標
+                    "continuity_ratio": tracking.get("continuity_metrics", {}).get("continuity_ratio", 0),
+                    "total_gaps": tracking.get("continuity_metrics", {}).get("total_gaps", 0),
+                    "tracks_with_gaps": tracking.get("continuity_metrics", {}).get("tracks_with_gaps", 0),
+                    # 片段化指標
+                    "fragmentation_ratio": tracking.get("fragmentation_metrics", {}).get("fragmentation_ratio", 0),
+                    "cv_track_length": tracking.get("fragmentation_metrics", {}).get("cv_track_length", 0),
+                    # 新軌跡頻率
+                    "total_new_tracks": tracking.get("new_track_frequency", {}).get("total_new_tracks", 0),
+                    "avg_new_tracks_per_frame": tracking.get("new_track_frequency", {}).get("avg_new_tracks_per_frame", 0),
+                    # ID 切換
+                    "total_id_switches": tracking.get("id_switch_stats", {}).get("total_id_switches", 0),
+                    "id_switches_per_frame": tracking.get("id_switch_stats", {}).get("id_switches_per_frame", 0)
                 })
 
             # 執行資訊
@@ -99,24 +116,30 @@ class StatisticsAnalyzer:
         # 清理數據：移除 NaN 值
         clean_df = self.df.dropna(subset=[target_metric])
         if clean_df.empty:
-            print(f"警告: 所有 {target_metric} 值都是 NaN，無法進行敏感度分析")
+            logger.warning(f"所有 {target_metric} 值都是 NaN，無法進行敏感度分析")
             return {}
 
         sensitivity_results = {}
 
-        # 獲取數值型參數
+        # 獲取數值型和分類型參數
         numeric_params = clean_df.select_dtypes(include=[np.number]).columns
-        numeric_params = [p for p in numeric_params if p != target_metric and p in clean_df.columns]
+        categorical_params = clean_df.select_dtypes(include=['object', 'category']).columns
+        all_params = list(numeric_params) + list(categorical_params)
+        all_params = [p for p in all_params if p != target_metric and p in clean_df.columns and p != '_repetition']
 
-        for param in numeric_params:
+        for param in all_params:
             # 清理參數數據
             param_clean_df = clean_df.dropna(subset=[param])
             if param_clean_df.empty or param_clean_df[param].nunique() < 2:
                 continue
 
             try:
-                # 計算相關係數
-                correlation = param_clean_df[param].corr(param_clean_df[target_metric])
+                # 計算相關係數（只對數值型參數）
+                if param in numeric_params:
+                    correlation = param_clean_df[param].corr(param_clean_df[target_metric])
+                else:
+                    # 對於分類變數，使用 ANOVA F 統計量作為相關性的代理指標
+                    correlation = None
 
                 # 檢查是否有足夠的數據進行 ANOVA
                 groups = [group[target_metric].values for name, group in param_clean_df.groupby(param)]
@@ -126,18 +149,18 @@ class StatisticsAnalyzer:
                     f_stat, p_value = stats.f_oneway(*groups)
                 else:
                     f_stat, p_value = None, None
-                    print(f"警告: 參數 {param} 數據不足，無法進行 ANOVA 分析")
+                    logger.warning(f"參數 {param} 數據不足，無法進行 ANOVA 分析")
 
                 sensitivity_results[param] = {
-                    "correlation": correlation if not np.isnan(correlation) else 0.0,
-                    "f_statistic": f_stat,
-                    "p_value": p_value,
-                    "significant": p_value is not None and p_value < 0.05,
-                    "sample_size": len(param_clean_df),
-                    "unique_values": param_clean_df[param].nunique()
+                    "correlation": float(correlation) if correlation is not None and not np.isnan(correlation) else None,
+                    "f_statistic": float(f_stat) if f_stat is not None else None,
+                    "p_value": float(p_value) if p_value is not None else None,
+                    "significant": bool(p_value is not None and p_value < 0.05),
+                    "sample_size": int(len(param_clean_df)),
+                    "unique_values": int(param_clean_df[param].nunique())
                 }
             except Exception as e:
-                print(f"分析參數 {param} 時發生錯誤: {e}")
+                logger.error(f"分析參數 {param} 時發生錯誤: {e}")
                 continue
 
         return sensitivity_results
@@ -178,9 +201,9 @@ class StatisticsAnalyzer:
 
             importance_results = {
                 "model_performance": {
-                    "r2_score": rf.score(X, y),
-                    "cv_mean_r2": cv_scores.mean(),
-                    "cv_std_r2": cv_scores.std()
+                    "r2_score": float(rf.score(X, y)),
+                    "cv_mean_r2": float(cv_scores.mean()),
+                    "cv_std_r2": float(cv_scores.std())
                 },
                 "feature_importance": {},
                 "top_features": []
@@ -306,7 +329,7 @@ class StatisticsAnalyzer:
                 "param2_values": pivot_table.columns.tolist()
             }
         except Exception as e:
-            print(f"分析參數交互作用時發生錯誤: {e}")
+            logger.error(f"分析參數交互作用時發生錯誤: {e}")
             return {}
 
     def _calculate_interaction_effect(self, param1: str, param2: str, target_metric: str) -> float:
@@ -398,9 +421,9 @@ class StatisticsAnalyzer:
                 param_values = self.df[param].dropna()
                 if len(param_values) > 1:
                     param_ranges[param] = {
-                        'min': param_values.min(),
-                        'max': param_values.max(),
-                        'std': param_values.std(),
+                        'min': float(param_values.min()),
+                        'max': float(param_values.max()),
+                        'std': float(param_values.std()),
                         'tested_values': param_values.unique().tolist()
                     }
 
@@ -428,7 +451,7 @@ class StatisticsAnalyzer:
             }
 
         except Exception as e:
-            print(f"貝葉斯優化分析時發生錯誤: {e}")
+            logger.error(f"貝葉斯優化分析時發生錯誤: {e}")
             return {}
 
     def _assess_exploration_completeness(self, param_ranges: Dict[str, Any]) -> Dict[str, float]:
@@ -501,7 +524,7 @@ class StatisticsAnalyzer:
             }
 
         except Exception as e:
-            print(f"多目標分析時發生錯誤: {e}")
+            logger.error(f"多目標分析時發生錯誤: {e}")
             return {}
 
     def _find_pareto_front(self, df: pd.DataFrame, metrics: List[str]) -> List[int]:
@@ -537,7 +560,7 @@ class StatisticsAnalyzer:
             for metric2 in metrics[i+1:]:
                 correlation = df[metric1].corr(df[metric2])
                 trade_offs[f'{metric1}_vs_{metric2}'] = {
-                    'correlation': correlation,
+                    'correlation': float(correlation),
                     'relationship': 'positive' if correlation > 0.3 else 'negative' if correlation < -0.3 else 'weak'
                 }
 
@@ -612,12 +635,12 @@ class StatisticsAnalyzer:
                                 }
                             }
                     except Exception as e:
-                        print(f"分析參數 {param} 時發生錯誤: {e}")
+                        logger.error(f"分析參數 {param} 時發生錯誤: {e}")
 
             results['parameter_effects'] = param_effects
 
         except Exception as e:
-            print(f"進階統計檢驗時發生錯誤: {e}")
+            logger.error(f"進階統計檢驗時發生錯誤: {e}")
 
         return results
 
@@ -645,12 +668,12 @@ class StatisticsAnalyzer:
             values = self.df[col].dropna()
             if not values.empty:
                 report["overall_statistics"][col] = {
-                    "mean": values.mean(),
-                    "median": values.median(),
-                    "std": values.std(),
-                    "min": values.min(),
-                    "max": values.max(),
-                    "count": len(values)
+                    "mean": float(values.mean()),
+                    "median": float(values.median()),
+                    "std": float(values.std()),
+                    "min": float(values.min()),
+                    "max": float(values.max()),
+                    "count": int(len(values))
                 }
 
         # 分組比較
@@ -737,7 +760,7 @@ class StatisticsAnalyzer:
             self._plot_performance_trends(output_dir)
 
         except Exception as e:
-            print(f"生成可視化時發生錯誤: {e}")
+            logger.error(f"生成可視化時發生錯誤: {e}")
 
     def _plot_parameter_interaction_heatmap(self, output_dir: str):
         """繪製參數交互作用熱力圖"""
@@ -763,7 +786,7 @@ class StatisticsAnalyzer:
                        dpi=300, bbox_inches='tight')
             plt.close()
         except Exception as e:
-            print(f"生成參數交互作用熱力圖時發生錯誤: {e}")
+            logger.error(f"生成參數交互作用熱力圖時發生錯誤: {e}")
 
     def _plot_parameter_performance_scatter(self, output_dir: str):
         """繪製參數-效能散點圖"""

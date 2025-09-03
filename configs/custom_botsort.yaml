@@ -11,7 +11,7 @@ new_track_thresh: 0.4       # 創建新軌跡的閾值，提高可減少噪聲�
 
 # 軌跡管理
 track_buffer: 50            # 軌跡丟失後保持的幀數，增加可提高遮擋處理
-match_thresh: 0.8           # 軌跡匹配的 IoU 閾值
+match_thresh: 0.8           # 匹配軌跡的閾值。 數值越高，匹配越寬鬆。
 
 # 分數融合
 fuse_score: true            # 融合檢測分數和 IoU，提高匹配準確性

@@ -1,0 +1,21 @@
+services:
+  dev-env:
+    image: python:3.10-slim
+    # 啟用 GPU (需要主機已安裝 NVIDIA Container Toolkit)
+    gpus: all
+    working_dir: /app
+    environment:
+      PIP_NO_CACHE_DIR: "1"
+      UV_SYSTEM_PYPROJECT: "1"
+      # 讓容器可見全部 GPU 與所有 driver 能力
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: all
+    volumes:
+      - ./:/app
+    command: >
+      sh -c "
+        pip install --upgrade pip uv &&
+        uv pip sync --system pyproject.toml &&
+        tail -f /dev/null
+      "
+    tty: true

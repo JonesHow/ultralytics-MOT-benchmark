@@ -27,3 +27,6 @@ models/
 RAW_ORIGINAL_VIDEOS/
 RAW_SHORT_VIDEOS/
 output_videos/
+outputs/
+data/raw/
+data/samples/

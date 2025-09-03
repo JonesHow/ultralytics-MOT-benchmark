@@ -80,10 +80,10 @@ def crop_and_speed_up_video(input_path, output_folder, start_sec, output_duratio
     print(f"Output video saved to: {output_path}")
 
 # Example usage
-input_video = os.path.abspath('RAW_SHORT_VIDEOS/camera-d8accaf0-2a04-4e83-a43c-511ec5fc0a0e_20250829_0900_s0s_1x_300s.mp4')
-output_folder = 'RAW_SHORT_VIDEOS'
+input_video = os.path.abspath('data/samples/camera-d8accaf0-2a04-4e83-a43c-511ec5fc0a0e_20250829_0900_s0s_1x_300s.mp4')
+output_folder = 'data/samples'
 start_sec = 126  # Starting time in seconds for cropping
-output_duration = 60  # Desired duration of the output video in seconds
+output_duration = 10  # Desired duration of the output video in seconds
 speed_up = 1    # Speed up factor
 
 # input_folder = ''

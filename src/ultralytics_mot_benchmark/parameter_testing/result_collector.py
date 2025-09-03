@@ -10,6 +10,17 @@ from typing import Dict, Any, List
 from datetime import datetime
 import statistics
 from statistics_analyzer import StatisticsAnalyzer
+from loguru import logger
+
+
+class NumpyEncoder(json.JSONEncoder):
+    """自定義 JSON 編碼器，用於處理 numpy 類型"""
+    def default(self, obj):
+        if hasattr(obj, 'item'):  # numpy 類型
+            return obj.item()
+        elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes)):
+            return list(obj)
+        return super().default(obj)
 
 
 class ResultCollector:
@@ -108,25 +119,40 @@ class ResultCollector:
         Returns:
             追蹤指標字典
         """
-        metrics = {
-            "total_tracks": 0,
-            "avg_track_length": 0,
-            "track_switches": 0
-        }
+        # 從 metadata 中提取新的追蹤指標
+        if "metadata" in test_result:
+            metadata = test_result["metadata"]
+            if isinstance(metadata, dict) and "tracking_metrics" in metadata:
+                tracking_metrics = metadata["tracking_metrics"]
+                if isinstance(tracking_metrics, dict):
+                    return tracking_metrics.copy()
 
-        # 從 metadata 中提取
+        # 如果沒有找到新的結構，回退到舊結構或返回默認值
         if "metadata" in test_result:
             metadata = test_result["metadata"]
             if isinstance(metadata, dict):
                 if "tracking" in metadata:
                     tracking = metadata["tracking"]
-                    metrics.update({
+                    return {
                         "total_tracks": tracking.get("total_tracks", 0),
                         "avg_track_length": tracking.get("avg_track_length", 0),
                         "track_switches": tracking.get("track_switches", 0)
-                    })
+                    }
 
-        return metrics
+        # 返回默認的空指標
+        return {
+            "total_tracks": 0,
+            "avg_track_length": 0,
+            "max_track_length": 0,
+            "min_track_length": 0,
+            "track_lengths": [],
+            "continuity_metrics": {},
+            "fragmentation_metrics": {},
+            "new_track_frequency": {},
+            "id_switch_stats": {},
+            "frames_processed": 0,
+            "avg_active_tracks_per_frame": 0
+        }
 
     def _parse_log_file(self, log_path: str) -> Dict[str, Any]:
         """
@@ -163,7 +189,7 @@ class ResultCollector:
                 metrics["frames_processed"] = int(frames_match.group(1))
 
         except Exception as e:
-            print(f"解析日誌檔案失敗 {log_path}: {e}")
+            logger.warning(f"解析日誌檔案失敗 {log_path}: {e}")
 
         return metrics
 
@@ -227,7 +253,7 @@ class ResultCollector:
             output_path: 輸出檔案路徑
         """
         with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(self.results, f, indent=2, ensure_ascii=False)
+            json.dump(self.results, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
 
     def generate_analysis_report(self, output_dir: str = "reports") -> str:
         """

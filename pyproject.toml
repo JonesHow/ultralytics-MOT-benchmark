@@ -1,12 +1,12 @@
 [project]
-name = "lab-ultralytics-reid"
+name = "ultralytics-mot-benchmark"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
     "loguru>=0.7.3",
-    "opencv-python>=4.12.0.88",
+    "opencv-python-headless>=4.12.0.88",
     "pyyaml>=6.0.0",
     "tqdm>=4.67.1",
     "ultralytics>=8.3.189",
@@ -18,3 +18,21 @@ dependencies = [
     "plotly>=5.0.0",
     "scikit-learn>=1.0.0",
 ]
+
+[project.scripts]
+mot-infer = "ultralytics_mot_benchmark.cli.infer:main"
+mot-params = "ultralytics_mot_benchmark.parameter_testing.parameter_tester:main"
+mot-analyze = "ultralytics_mot_benchmark.cli.analyze_filter_logs:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

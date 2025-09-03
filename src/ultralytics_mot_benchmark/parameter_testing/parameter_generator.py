@@ -63,6 +63,17 @@ class ParameterGenerator:
             random.seed(self.strategy.get('random_seed', 42))
             combinations = random.sample(combinations, max_combinations)
 
+        # 添加重複測試
+        repetitions = self.strategy.get('repetitions', 1)
+        if repetitions > 1:
+            repeated_combinations = []
+            for combo in combinations:
+                for i in range(repetitions):
+                    repeated_combo = combo.copy()
+                    repeated_combo['_repetition'] = i + 1
+                    repeated_combinations.append(repeated_combo)
+            combinations = repeated_combinations
+
         return combinations
 
     def _generate_random_search(self) -> List[Dict[str, Any]]:
@@ -77,6 +88,17 @@ class ParameterGenerator:
                 values = self._parse_parameter_config(param_config)
                 combo[param_name] = random.choice(values)
             combinations.append(combo)
+
+        # 添加重複測試
+        repetitions = self.strategy.get('repetitions', 1)
+        if repetitions > 1:
+            repeated_combinations = []
+            for combo in combinations:
+                for i in range(repetitions):
+                    repeated_combo = combo.copy()
+                    repeated_combo['_repetition'] = i + 1
+                    repeated_combinations.append(repeated_combo)
+            combinations = repeated_combinations
 
         return combinations
 
